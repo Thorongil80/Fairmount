@@ -132,7 +132,7 @@ static BOOL ShouldTakeOver(DADiskRef disk)
 //-------------------------------------------------------------------------
 //-------------------------------------------------------------------------
 @implementation DVDServer
-- (id) initWithSession:(DASessionRef)session tableView:(NSTableView*)tableView extractDir:(NSString*)extractDir
+- (id) initWithSession:(DASessionRef)session tableView:(NSTableView*)tableView extractDir:(NSString*)extractDir caller:(NSObject *)caller
  {
     if ((self = [super init]))
     {
@@ -145,6 +145,8 @@ static BOOL ShouldTakeOver(DADiskRef disk)
         mDASession = (DASessionRef)CFRetain(session);
         mTableView = [tableView retain];
         mExtractDir = [extractDir copy];
+        mCaller = [caller retain];
+        
     }
     return self;
 }
@@ -336,14 +338,14 @@ static BOOL ShouldTakeOver(DADiskRef disk)
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             STATUS(@"Extracting...");
             [[NSFileManager defaultManager] copyItemAtURL:[NSURL fileURLWithPath:mountPoint isDirectory:YES] toURL:[mExtractDir URLByAppendingPathComponent:[mountPoint lastPathComponent]] error:nil];
-            [self stopServingAndEject:YES];
+            BOOL ok = [self stopServingAndEject:YES];
+            if (ok) [mCaller removeServer:self];
         });
         
 
         
     }
 
-    
     STATUS(device);
     
     
@@ -640,8 +642,8 @@ error:
 //-------------------------------------------------------------------------
 - (void) takeOver:(DADiskRef)disk
 {
-    DVDServer *server = [[DVDServer alloc] initWithSession:mDASession tableView:mTableView extractDir:mExtractDir];
-
+    DVDServer *server = [[DVDServer alloc] initWithSession:mDASession tableView:mTableView extractDir:mExtractDir caller:self];
+    
     [mServers addObject:server];
     [mTableView reloadData];
 
@@ -662,6 +664,14 @@ error:
 {
     return [mServers count];
 }
+
+//-------------------------------------------------------------------------
+// let a server remove itself
+- (void) removeServer:(DVDServer*)server;
+{
+    [mServers removeObject:server];
+}
+
 
 //-------------------------------------------------------------------------
 - (id)tableView:(NSTableView *)aTableView objectValueForTableColumn:(NSTableColumn *)aTableColumn row:(int)rowIndex
@@ -719,6 +729,8 @@ error:
     }
     [mTableView reloadData];
 }
+
+
 
 //-------------------------------------------------------------------------
 - (NSString *)tableView:(NSTableView *)tv toolTipForCell:(NSCell *)cell rect:(NSRectPointer)rect

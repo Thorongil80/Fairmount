@@ -13,6 +13,16 @@ Fairmount was originally developed by Metakine, but it appears to have
 vanished from their web site. However, it was released under the GPL,
 so others may continue to develop it.
 
+## Note on this fork
+
+This fork is a a modified version that features Auto-Rip function. If you select a directory
+on startup, all mounted DVDs will get extracted thereto and then after completion the DVD ejected.
+Also this fork got rid of the overlay notification which disturbs workflow.
+
+If you do not select a directory on startup, it behaves exactly like the regular Fairmount.
+
+Note libdvdcss 2.13 has no Mac binary, so we point to 2.12 folder.
+
 ## Getting Binaries
 
 For now, a zip file of the .app for OS X 10.6 and later (Intel only)

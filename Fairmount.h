@@ -17,8 +17,9 @@
     NSTableView     *mTableView;
     NSURL           *mExtractDir;
     int             mErrCode;
+    NSObject        *mCaller;
 }
-- (id) initWithSession:(DASessionRef)session tableView:(NSTableView*)tableView extractDir:(NSURL*)extractDir;
+- (id) initWithSession:(DASessionRef)session tableView:(NSTableView*)tableView extractDir:(NSURL*)extractDir caller:(NSObject*)caller;
 
 - (void) requestDone:(int)errCode;
 - (DADiskRef) decryptedDisk;
@@ -27,6 +28,7 @@
 - (void) setStatus:(NSString*)status;
 - (int64) bytesRead;
 - (int64) badSectorCount;
+
 
 - (void) takeOverDisk:(DADiskRef)disk;
 
@@ -47,7 +49,7 @@
 
 - (void) downloadVLC:(id)sender;
 - (void) retryVLC:(id)sender;
-- (void) toggleAutoRip:(id)sender;
+- (void) removeServer:(DVDServer*)server;
 
 - (void) diskAppearedCb:(DADiskRef)disk;
 - (void) diskDisappearedCb:(DADiskRef)disk;
