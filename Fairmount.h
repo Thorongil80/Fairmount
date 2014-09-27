@@ -15,9 +15,10 @@
     BOOL            mRequestingService, mCallbackCalled;
     NSString        *mStatus;
     NSTableView     *mTableView;
+    NSURL           *mExtractDir;
     int             mErrCode;
 }
-- (id) initWithSession:(DASessionRef)session tableView:(NSTableView*)tableView;
+- (id) initWithSession:(DASessionRef)session tableView:(NSTableView*)tableView extractDir:(NSURL*)extractDir;
 
 - (void) requestDone:(int)errCode;
 - (DADiskRef) decryptedDisk;
@@ -40,12 +41,13 @@
 
     NSMutableArray          *mServers;
     DASessionRef            mDASession;
-
     IBOutlet NSWindow       *mVLCWindow;
+    NSURL                  *mExtractDir;
 }
 
 - (void) downloadVLC:(id)sender;
 - (void) retryVLC:(id)sender;
+- (void) toggleAutoRip:(id)sender;
 
 - (void) diskAppearedCb:(DADiskRef)disk;
 - (void) diskDisappearedCb:(DADiskRef)disk;

@@ -1,5 +1,5 @@
 #import "Fairmount.h"
-#import "Overlay.h"
+//#import "Overlay.h"
 #include "Decryption.h"
 #include "ListFiles.h"
 
@@ -132,8 +132,8 @@ static BOOL ShouldTakeOver(DADiskRef disk)
 //-------------------------------------------------------------------------
 //-------------------------------------------------------------------------
 @implementation DVDServer
-- (id) initWithSession:(DASessionRef)session tableView:(NSTableView*)tableView
-{
+- (id) initWithSession:(DASessionRef)session tableView:(NSTableView*)tableView extractDir:(NSString*)extractDir
+ {
     if ((self = [super init]))
     {
         if (!session)
@@ -144,6 +144,7 @@ static BOOL ShouldTakeOver(DADiskRef disk)
 
         mDASession = (DASessionRef)CFRetain(session);
         mTableView = [tableView retain];
+        mExtractDir = [extractDir copy];
     }
     return self;
 }
@@ -214,7 +215,7 @@ static BOOL ShouldTakeOver(DADiskRef disk)
 //-------------------------------------------------------------------------
 - (void) takeOverDisk:(DADiskRef)disk
 {
-    Overlay *overlay = [[Overlay alloc] init];
+    //Overlay *overlay; // = [[Overlay alloc] init];
 
     mOriginalDisk = (DADiskRef)CFRetain(disk);
 
@@ -225,7 +226,7 @@ static BOOL ShouldTakeOver(DADiskRef disk)
 
     // unmount original
     STATUS(@"Unmounting original disk...");
-    if (overlay) [overlay setStep:1];
+    //if (overlay) [overlay setStep:1];
 
     PRE_REQUEST;
     DADiskUnmount(  disk, kDADiskUnmountOptionForce,
@@ -235,7 +236,7 @@ static BOOL ShouldTakeOver(DADiskRef disk)
 
     // start web server
     STATUS(@"Starting data server...");
-    if (overlay) [overlay setStep:2];
+    //if (overlay) [overlay setStep:2];
 
     NSString *bsd;
     NSString *device;
@@ -244,27 +245,33 @@ static BOOL ShouldTakeOver(DADiskRef disk)
     mHTTPServer = createServer([device UTF8String], fileList);
     if (!mHTTPServer) { LOG(@"Error creating http server."); goto error; }
 
+    
+    NSString *url;
+    url = [NSString stringWithFormat:@"http://127.0.0.1:%i/dvd.iso", getServerPort(mHTTPServer)];
+    
+    
+    NSLog(@"Mounting");
+        
     // mount remote image
     STATUS(@"Mounting image...");
-    if (overlay) [overlay setStep:3];
-
+    //if (overlay) [overlay setStep:3];
+        
     NSTask *mountTask;
     mountTask = [[[NSTask alloc] init] autorelease];
     if (!mountTask) { LOG(@"Error creating a NSTask."); goto error; }
-
+    
     NSPipe *pipe;
     pipe = [NSPipe pipe];
     if (!pipe) { LOG(@"Error creating a NSPipe."); goto error; }
+    
 
-    NSString *url;
-    url = [NSString stringWithFormat:@"http://127.0.0.1:%i/dvd.iso", getServerPort(mHTTPServer)];
-
+    
     [mountTask setLaunchPath:@"/usr/bin/hdiutil"];
     [mountTask setArguments:[NSArray arrayWithObjects:@"attach", @"-plist", url, nil]];
     [mountTask setStandardOutput:pipe];
-
+    
     [mountTask launch];
-
+    
     // read back plist
     NSFileHandle *fh;
     NSMutableData *dataOutput;
@@ -277,50 +284,75 @@ static BOOL ShouldTakeOver(DADiskRef disk)
         byte buffer[1024];
         int ret = read(fd, buffer, 1024);
         if (ret <= 0) break;
-
+        
         [dataOutput appendBytes:buffer length:ret];
     }
-
+    
     [mountTask waitUntilExit];
     int ret;
     ret = [mountTask terminationStatus];
     if (ret != 0) { LOG(@"mountTask terminationStatus error."); goto error; }
     if (!dataOutput || [dataOutput length] == 0) { LOG(@"mountTask data return size error."); goto error; }
-
+    
     // find decrypted disk
     NSDictionary *dict;
     dict = [NSPropertyListSerialization propertyListFromData:dataOutput
                                             mutabilityOption:NSPropertyListImmutable
-                                                        format:nil
+                                                      format:nil
                                             errorDescription:nil];
     if (!dict) { LOG(@"NSPropertyListSerialization error."); goto error; }
-
+    
     NSArray *entities;
     entities = [dict objectForKey:@"system-entities"];
     if (!entities || [entities count] == 0) { LOG(@"system-entities error."); goto error; }
-
+    
     NSDictionary *entity;
     NSString *decryptedDevice;
     entity = [entities objectAtIndex:0];
     decryptedDevice = [entity objectForKey:@"dev-entry"];
     if (!decryptedDevice) { LOG(@"dev-entry error."); goto error; }
-
+    
     mDecryptedDisk = DADiskCreateFromBSDName(nil, mDASession, [decryptedDevice UTF8String]);
     if (!mDecryptedDisk) { LOG(@"DADiskCreateFromBSDName error."); goto error; }
-
+    
+    
+    
+    
     // everything is ok!
-    STATUS(@"Fair disk mounted.");
-    if (overlay)
-    {
-        [overlay setStep:4];
-        [overlay release];
+    //STATUS(@"Fair disk mounted.");
+    //STATUS(device);
+    //if (overlay)
+    //{
+    //    [overlay setStep:4];
+    //    [overlay release];
+    //}
+    
+    
+    if (mExtractDir) {
+        
+        //NSLog((mExtractDir fileSystemRepresentation));
+        NSLog(@"Extract before mount");
+        
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            STATUS(@"Extracting...");
+            [[NSFileManager defaultManager] copyItemAtURL:[NSURL fileURLWithPath:mountPoint isDirectory:YES] toURL:[mExtractDir URLByAppendingPathComponent:[mountPoint lastPathComponent]] error:nil];
+            [self stopServingAndEject:YES];
+        });
+        
+
+        
     }
+
+    
+    STATUS(device);
+    
+    
     return;
 
 error:
     LOG(@"Bailing out on error...\n");
     STATUS(@"Error while taking over disk...");
-    if (overlay) [overlay release];
+    //if (overlay) [overlay release];
     [self stopServingAndEject:NO];
 }
 
@@ -445,16 +477,61 @@ error:
 
 - (void) downloadVLC:(id)sender
 {
-    [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@"http://download.videolan.org/libdvdcss/last/macosx/libdvdcss.pkg"]];
+    [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@"http://download.videolan.org/libdvdcss/1.2.12/macosx/libdvdcss.pkg"]];
 }
 
 - (void) retryVLC:(id)sender { [NSApp stopModal]; }
 
+- (void) toggleAutoRip:(id)sender { }
+
 //-------------------------------------------------------------------------
 - (void) awakeFromNib
 {
+    
+    // ask target dir
+    
+    // Create the File Open Dialog class.
+    NSOpenPanel* openDlg = [NSOpenPanel openPanel];
+    
+    // Enable the selection of files in the dialog.
+    [openDlg setCanChooseFiles:NO];
+    
+    // Enable the selection of directories in the dialog.
+    [openDlg setCanChooseDirectories:YES];
+    
+    [openDlg setAllowsMultipleSelection:NO];
+    
+    [openDlg setPrompt:@"Select extraction folder"];
+    
+    // Display the dialog.  If the OK button was pressed,
+    // process the files.
+    if ( [openDlg runModal] == NSOKButton )
+    {
+        // Get an array containing the full filenames of all
+        // files and directories selected.
+        //mExtractDir = [openDlg directoryURL];
+        
+        // Get an array containing the full filenames of all
+        // files and directories selected.
+        NSArray* files = [openDlg URLs];
+        
+        // Loop through all the files and process them.
+        for( int i = 0; i < [files count]; i++ )
+        {
+           // NSString* fileName = [files objectAtIndex:i];
+
+            // Do something with the filename.
+            mExtractDir = [[files objectAtIndex:i]  copy];
+            NSLog(@"extract dir: %@", mExtractDir);
+        }
+    }
+
+    
+    
+    // initialize libdvdcss library
+    
     NSArray *libPaths = [NSArray arrayWithObjects:
-                             [[NSBundle mainBundle] pathForResource:@"libdvdcss.2" ofType:@"dylib"],
+                             //[[NSBundle mainBundle] pathForResource:@"libdvdcss.2" ofType:@"dylib"],
                              INSTALL_PATH,
                              [@"~/Library/Application Support/Fairmount/libdvdcss.2.dylib" stringByExpandingTildeInPath],
                              @"/usr/lib/libdvdcss.2.dylib",
@@ -563,7 +640,7 @@ error:
 //-------------------------------------------------------------------------
 - (void) takeOver:(DADiskRef)disk
 {
-    DVDServer *server = [[DVDServer alloc] initWithSession:mDASession tableView:mTableView];
+    DVDServer *server = [[DVDServer alloc] initWithSession:mDASession tableView:mTableView extractDir:mExtractDir];
 
     [mServers addObject:server];
     [mTableView reloadData];
@@ -614,6 +691,11 @@ error:
         if (amount < megabyte) return [NSString stringWithFormat:@"%.2f KB", amount / (double)kilobyte];
         if (amount < gigabyte) return [NSString stringWithFormat:@"%.2f MB", amount / (double)megabyte];
         return [NSString stringWithFormat:@"%.2f GB", amount / (double)gigabyte];
+    }
+    
+    else if ([identifier isEqual:@"rip"]) {
+        //NSString *filePath =[mExtractDir path];
+        return  mExtractDir; //filePath;  //[NSString stringWithContentsOfURL:<#(NSURL *)#> encoding:<#(NSStringEncoding)#> error:<#(NSError **)#>: mExtractDir ];
     }
 
     return nil;
