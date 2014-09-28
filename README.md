@@ -26,7 +26,7 @@ Note libdvdcss 2.13 has no Mac binary, so we point to 2.12 folder.
 ## Getting Binaries
 
 For now, a zip file of the .app for OS X 10.6 and later (Intel only)
-is located at: <https://github.com/pmetzger/Fairmount/downloads>
+is located under "Releases" of this Github project.
 
 You must also install the package found at:
 <http://download.videolan.org/libdvdcss/last/macosx/libdvdcss.pkg> --
